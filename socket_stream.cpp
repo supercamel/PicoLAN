@@ -7,6 +7,8 @@ namespace picolan
 
 int SocketStream::write(uint8_t* bytes, uint32_t len)
 {
+	// 12 bytes for packet headers + checksum
+	constexpr uint32_t BYTES_PER_FRAME = MAX_PACKET_LENGTH-12;
 	constexpr uint32_t FRAME_BURST_SZ = 4;
 	uint32_t bytes_sent = 0;
 	uint32_t frames_sent = 0;
@@ -26,9 +28,9 @@ int SocketStream::write(uint8_t* bytes, uint32_t len)
 			pack.payload.append(next_seq);
 
 #ifdef ETK_MIN
-			uint32_t bytes_to_send = etk::min<uint32_t>(218, len-bytes_sent);
+			uint32_t bytes_to_send = etk::min<uint32_t>(BYTES_PER_FRAME, len-bytes_sent);
 #else
-			uint32_t bytes_to_send = min(218, len-bytes_sent);
+			uint32_t bytes_to_send = min(BYTES_PER_FRAME, len-bytes_sent);
 #endif
 			for(uint32_t j = 0; j < bytes_to_send; j++) {
 				uint8_t bb = bytes[bytes_sent++];
