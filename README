@@ -1,0 +1,17 @@
+# PicoLAN
+
+## Brief
+
+PicoLAN is a packet switched network that uses switch devices (little electronic circuit boards with a microcontroller) to enable full network capability over serial ports. 
+
+Multiple Arduinos or Raspberry Pis can communicate and exchange data with each other via serial/UART. 
+
+
+## Documentation
+
+The code has been documented using Doxygen comments. 
+Pre-generated documentation can be located at 
+https://picolan.camelsoftware.com
+
+
+
