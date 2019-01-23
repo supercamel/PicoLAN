@@ -7,6 +7,10 @@ namespace picolan
 
 int SocketStream::write(uint8_t* bytes, uint32_t len)
 {
+	if(state != CONNECTION_OPEN) {
+		return ERROR_BAD_STATE;
+	}
+
 	// 12 bytes for packet headers + checksum
 	constexpr uint32_t BYTES_PER_FRAME = MAX_PACKET_LENGTH-12;
 	constexpr uint32_t FRAME_BURST_SZ = 4;
@@ -76,8 +80,12 @@ int SocketStream::write(uint8_t* bytes, uint32_t len)
 	return bytes_sent;
 }
 
-uint32_t SocketStream::read(uint8_t* buffer, uint32_t len)
+int SocketStream::read(uint8_t* buffer, uint32_t len)
 {
+	if(state != CONNECTION_OPEN) {
+		return ERROR_BAD_STATE;
+	}
+
 	uint32_t ret = Socket::read(buffer, len);
 	if(ret == 0) {
 		zero_read_count++;

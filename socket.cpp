@@ -24,7 +24,7 @@ int Socket::timedRead() {
 	return ERROR_TIMEOUT;
 }
 
-uint32_t Socket::read(uint8_t* buffer, uint32_t len) {
+int32_t Socket::read(uint8_t* buffer, uint32_t len) {
 	uint32_t count = 0;
 	while(count < len) {
 		auto c = timedRead();
@@ -37,7 +37,9 @@ uint32_t Socket::read(uint8_t* buffer, uint32_t len) {
 }
 
 void Socket::destroy() {
-	iface->unbind_socket(this);
+	if(iface != nullptr) {
+		iface->unbind_socket(this);
+	}
 }
 
 }
