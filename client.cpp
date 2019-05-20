@@ -32,14 +32,14 @@ namespace picolan
 	int Client::connect(uint8_t r, uint8_t port)
 	{
 		if(state != CONNECTION_CLOSED) {
-			return ERROR_BAD_STATE;
+			return Error::BAD_STATE;
 		}
 
 		remote_port = port;
 		remote = r;
 
 		auto err = send_syn();
-		if(err != ERROR_NONE) {
+		if(err != Error::NONE) {
 			return err;
 		}
 
@@ -53,18 +53,19 @@ namespace picolan
 			dt = millis() - start;
 			if(dt > timeout) {
 				state = CONNECTION_CLOSED;
-				return ERROR_TIMEOUT;
+				return -1;
 			}
 		} while(state == CONNECTION_SYN_SENT);
 
+
 		if(state != CONNECTION_SYN_RECVED) {
 			disconnect();
-			return ERROR_BAD_STATE;
+			return Error::BAD_STATE;
 		}
 
 		SocketStream::send_ack();
 		state = CONNECTION_OPEN;
-		return ERROR_NONE;
+		return Error::NONE;
 	}
 
 	void Client::on_data(uint8_t r, const uint8_t* data, uint32_t len)
@@ -114,9 +115,11 @@ namespace picolan
 					}
 				}
 				break;
+			case CONNECTION_LISTENING:
+			case CONNECTION_PENDING:
+			break;
 		}
 	}
 
 
 }
-

@@ -29,89 +29,152 @@
 namespace picolan
 {
 
+struct seq_tuple {
+    seq_tuple() {
+        seq = -1;
+        pos = 0;
+    }
+
+    seq_tuple(uint8_t s, uint32_t bp) {
+        seq = s;
+        pos = bp;
+    }
+
+    int seq;
+    uint32_t pos;
+};
+
+#ifndef PICOLAN_NODE_BINDING
 int SocketStream::write(uint8_t* bytes, uint32_t len)
 {
+#else
+int SocketStream::write(std::vector<uint8_t> bytes)
+{
+    uint32_t len = bytes.size();
+#endif
+
 	if(state != CONNECTION_OPEN) {
-		return ERROR_BAD_STATE;
+		return Error::BAD_STATE;
 	}
+
+    if(len == 0) {
+        return 0;
+    }
 
 	// 12 bytes for packet headers + checksum
 	constexpr uint32_t BYTES_PER_FRAME = MAX_PACKET_LENGTH-12;
+
+    // sends this many frames in a burst before checking acks
 	constexpr uint32_t FRAME_BURST_SZ = 4;
-	uint32_t bytes_sent = 0;
-	uint32_t frames_sent = 0;
-	uint32_t dead_count = 0;
-	while(bytes_sent != len) {
-		uint8_t start_recved_ack = last_recved_ack;
-		uint32_t byte_sent_start = bytes_sent;
-		uint8_t burst_sz = 0;
-		while((burst_sz < FRAME_BURST_SZ) && (bytes_sent < len)) {
-			auto pack = iface->create_packet<datagram_pack>();
-			pack.ttl = 6;
-			pack.dest_addr = remote;
-			pack.source_addr = iface->get_address();
-			pack.port = remote_port;
-			pack.payload.append(MESSAGE_TYPE::DATA);
-			uint8_t next_seq = sequence_number+burst_sz;
-			pack.payload.append(next_seq);
 
-#ifdef ETK_MIN
-			uint32_t bytes_to_send = etk::min<uint32_t>(BYTES_PER_FRAME, len-bytes_sent);
-#else
-			uint32_t bytes_to_send = min(BYTES_PER_FRAME, len-bytes_sent);
-#endif
-			for(uint32_t j = 0; j < bytes_to_send; j++) {
-				uint8_t bb = bytes[bytes_sent++];
-				pack.payload.append(bb);
-				if(bytes_sent == len) {
-					break;
-				}
-			}
-			iface->read();
-			pack.send();
-			burst_sz++;
-		}
+    seq_tuple frame_byte_pos[FRAME_BURST_SZ];
 
-		uint8_t last_sequence = sequence_number+burst_sz;
+    //position of next byte to send (counter for how many bytes are sent)
+    uint32_t bytes_pos = 0;
 
-		auto ack_start = millis();
-		do {
-			iface->read();
-			uint32_t ack_dt = millis()-ack_start;
-			if(ack_dt > timeout) {
-				break;
-			}
-		} while(last_recved_ack != last_sequence);
+    uint32_t no_ack_count = 0;
 
+    do
+    {
+        // num packets to send is calculated from bytes remaining
+        uint32_t packets_to_send = (len-bytes_pos)/BYTES_PER_FRAME;
+        if((len-bytes_pos) % BYTES_PER_FRAME) {
+            packets_to_send++;
+        }
 
-		if(last_recved_ack == sequence_number) {
-			dead_count++;
-			if(dead_count > 3) {
-				return ERROR_TIMEOUT;
-			}
-		} else {
-			dead_count = 0;
-		}
+        // constrain packets to send to frame burst size
+        if(packets_to_send > FRAME_BURST_SZ) {
+            packets_to_send = FRAME_BURST_SZ;
+        }
 
-		uint8_t distance = last_recved_ack-sequence_number;
-		if(distance > FRAME_BURST_SZ) {
-			return ERROR_ACK_OUT_OF_SEQUENCE;
-		}
-		frames_sent += distance;
-		sequence_number += distance;
-		bytes_sent = (frames_sent*218);
-	}
-	return bytes_sent;
+        uint32_t initial_byte_pos = bytes_pos;
+
+        // clear tuple
+        for(auto i : etk::range(FRAME_BURST_SZ)) {
+            frame_byte_pos[i] = seq_tuple(-1, 0);
+        }
+
+        // sequence counter for this burst
+        uint8_t burst_seq = 0;
+        uint8_t final_seq;
+        for(int i = 0; i < packets_to_send; i++) {
+            frame_byte_pos[i].seq = final_seq = (uint8_t)(sequence_number + (++burst_seq));
+
+            // create the packet
+            auto pack = iface->create_packet<datagram_pack>();
+            pack.ttl = 6;
+            pack.dest_addr = remote;
+            pack.source_addr = iface->get_address();
+            pack.port = remote_port;
+            pack.payload.append(MESSAGE_TYPE::DATA);
+            pack.payload.append(frame_byte_pos[i].seq);
+
+            //stuff bytes into the packet
+            uint32_t bytes_to_send = min(BYTES_PER_FRAME, len-bytes_pos);
+            for(uint32_t j = 0; j < bytes_to_send; j++) {
+                uint8_t bb = bytes[bytes_pos++];
+                pack.payload.append(bb);
+                if(bytes_pos == len) {
+                    break;
+                }
+            }
+            iface->read();
+            //send it off
+            pack.send();
+            frame_byte_pos[i].pos = bytes_pos;
+        }
+
+        auto start_time = millis();
+        do {
+            iface->read();
+
+            if(last_recved_ack == final_seq) {
+                break;
+            }
+        } while(millis() - start_time < timeout);
+
+        if(last_recved_ack == sequence_number) {
+            no_ack_count++;
+            if(no_ack_count == 3) {
+                return Error::TIMEOUT;
+            }
+            bytes_pos = initial_byte_pos;
+        }
+        else {
+            bool found_pos = false;
+            for(int i = 0; i < FRAME_BURST_SZ; i++) {
+                if(last_recved_ack == frame_byte_pos[i].seq) {
+                    found_pos = true;
+                    bytes_pos = frame_byte_pos[i].pos;
+                    sequence_number += i;
+                }
+            }
+            if(found_pos == false) {
+                return Error::ACK_OUT_OF_SEQUENCE;
+            }
+        }
+    } while(bytes_pos != len);
+
+	return bytes_pos;
 }
 
+#ifndef PICOLAN_NODE_BINDING
 int SocketStream::read(uint8_t* buffer, uint32_t len)
 {
 	if(state != CONNECTION_OPEN) {
-		return ERROR_BAD_STATE;
+		return Error::BAD_STATE;
 	}
-
 	uint32_t ret = Socket::read(buffer, len);
-	if(ret == 0) {
+    if(ret == 0) {
+#else
+std::vector<uint8_t> SocketStream::read(uint32_t len)
+{
+	if(state != CONNECTION_OPEN) {
+		return std::vector<uint8_t>();
+	}
+	std::vector<uint8_t> ret = Socket::read(len);
+    if(ret.size() == 0) {
+#endif
 		zero_read_count++;
 		if(zero_read_count >= 3) {
 			disconnect();
@@ -164,7 +227,7 @@ int SocketStream::send_syn()
 	pack.payload.append(get_port());
 	pack.send();
 
-	return ERROR_NONE;
+	return Error::NONE;
 }
 
 
@@ -179,9 +242,8 @@ int SocketStream::send_ack()
 	pack.payload.append(remote_sequence);
 	pack.send();
 
-	return ERROR_NONE;
+	return Error::NONE;
 }
 
 
 }
-

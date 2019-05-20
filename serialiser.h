@@ -26,11 +26,17 @@
 #define PICOLAN_SERIALISER_H
 
 #include <stdint.h>
+
+#ifdef ARDUINO
+#include <etk.h>
+#else
 #include <etk/etk.h>
+#endif
+
+#include "address_field.h"
 
 
-
-namespace picolan 
+namespace picolan
 {
 
 	/**
@@ -46,13 +52,20 @@ namespace picolan
 	{
 		INVALID_PACK,
 		GET_ADDR_LIST_PACK,
-		ADDR_LIST_PACK,
+		ADDR_PACK,
 		PING_PACK,
 		PING_ECHO_PACK,
 		DATAGRAM_PACK,
+		SUBSCRIBE_PACK,
 		NULL_PACK
 	};
 
+	union u64b
+	{
+		uint64 u;
+		int64 i;
+		uint8 bytes[8];
+	};
 
 	union u32b
 	{
@@ -68,6 +81,8 @@ namespace picolan
 		int16 i;
 		uint8 bytes[2];
 	};
+
+
 
 	/**
 	 * SerialiserInterface defines several functions that the serialiser must implement.
@@ -182,6 +197,42 @@ namespace picolan
 				put(ub.bytes[3]);
 			}
 
+			void to_bytes(uint64 u)
+			{
+				u64b ub;
+				ub.u = u;
+				put(ub.bytes[0]);
+				put(ub.bytes[1]);
+				put(ub.bytes[2]);
+				put(ub.bytes[3]);
+				put(ub.bytes[4]);
+				put(ub.bytes[5]);
+				put(ub.bytes[6]);
+				put(ub.bytes[7]);
+			}
+
+			void to_bytes(int64 i)
+			{
+				u64b ub;
+				ub.i = i;
+				put(ub.bytes[0]);
+				put(ub.bytes[1]);
+				put(ub.bytes[2]);
+				put(ub.bytes[3]);
+				put(ub.bytes[4]);
+				put(ub.bytes[5]);
+				put(ub.bytes[6]);
+				put(ub.bytes[7]);
+			}
+
+			void to_bytes(AddressField af)
+			{
+				auto len = af.get_num_bytes();
+				for(int i = 0; i < len; i++) {
+					put(af.get_bitfield(i).get());
+				}
+			}
+
 			template <uint32 SZ> void from_bytes(uint8* bytes, uint16& pos, etk::StaticString<SZ>& str)
 			{
 				for(uint32 i = 0; i < SZ; i++)
@@ -257,7 +308,33 @@ namespace picolan
 				i = ub.i;
 			}
 
-			void finish() 
+			void from_bytes(uint8* bytes, uint16& pos, uint64& u)
+			{
+				u64b ub;
+				for(auto i : etk::range(8)) {
+					ub.bytes[i] = bytes[pos++];
+				}
+				u = ub.u;
+			}
+
+			void from_bytes(uint8* bytes, uint16& pos, int64& i)
+			{
+				u64b ub;
+				for(auto i : etk::range(8)) {
+					ub.bytes[i] = bytes[pos++];
+				}
+				i = ub.i;
+			}
+
+			void from_bytes(uint8* bytes, uint16& pos, picolan::AddressField& af)
+			{
+				auto len = af.get_num_bytes();
+				for(int i = 0; i < len; i++) {
+					af.get_bitfield(i).set(bytes[pos++]);
+				}
+			}
+
+			void finish()
 			{
 				u16b ub;
 				ub.u = serialiser->finish_checksum();
@@ -267,7 +344,7 @@ namespace picolan
 			}
 
 		protected:
-			void put(uint8_t b)
+			void put(uint8 b)
 			{
 				serialiser->send_byte(b);
 			}
@@ -307,36 +384,37 @@ namespace picolan
 	};
 
 	/**
-	 * addr_list_pack contains a list of up to 32 addresses.
+	 * addr_pack contains a bitfield of addresses
 	 * Used by switches to build routing tables.
 	 */
-	class addr_list_pack : public base_pack
+	class addr_pack : public base_pack
 	{
 		public:
-			addr_list_pack(SerialiserInterface* t) : base_pack(t) { }
-			static constexpr uint16 id = ADDR_LIST_PACK;
+			addr_pack(SerialiserInterface* t) : base_pack(t) { }
+			static constexpr uint16 id = ADDR_PACK;
 
-			etk::List<uint8, 32> list;
+			AddressField address_field;
+
 			uint8 size()
 			{
-				return (list.size()+1);
+				return (sizeof(address_field));
 			}
 			uint8 get_id() { return id; }
 			void send()
 			{
 				base_pack::gen_header();
-				base_pack::to_bytes(list);
+				base_pack::to_bytes(address_field);
 				base_pack::finish();
 			}
 			void from_bytes(uint8* bytes)
 			{
 				uint16 pos = 0;
-				base_pack::from_bytes(bytes, pos, list);
+				base_pack::from_bytes(bytes, pos, address_field);
 			}
 	};
 
 	/**
-	 * ping_pack sends a ping from one device to another. 
+	 * ping_pack sends a ping from one device to another.
 	 * The switches route this packet to all available interfaces that have the destination address.
 	 */
 	class ping_pack : public base_pack
@@ -351,9 +429,9 @@ namespace picolan
 			uint16 payload;
 			uint8 size()
 			{
-				return (sizeof(ttl) + 
-						sizeof(source_addr) + 
-						sizeof(dest_addr) + 
+				return (sizeof(ttl) +
+						sizeof(source_addr) +
+						sizeof(dest_addr) +
 						sizeof(payload));
 			}
 			uint8 get_id() { return id; }
@@ -392,9 +470,9 @@ namespace picolan
 			uint16 payload;
 			uint8 size()
 			{
-				return (sizeof(ttl) + 
-						sizeof(source_addr) + 
-						sizeof(dest_addr) + 
+				return (sizeof(ttl) +
+						sizeof(source_addr) +
+						sizeof(dest_addr) +
 						sizeof(payload));
 			}
 			uint8 get_id() { return id; }
@@ -433,10 +511,10 @@ namespace picolan
 			etk::List<uint8, 54> payload;
 			uint8 size()
 			{
-				return (sizeof(ttl) + 
-						sizeof(source_addr) + 
-						sizeof(dest_addr) + 
-						sizeof(port) + 
+				return (sizeof(ttl) +
+						sizeof(source_addr) +
+						sizeof(dest_addr) +
+						sizeof(port) +
 						payload.size()+1);
 			}
 			uint8 get_id() { return id; }
@@ -461,26 +539,65 @@ namespace picolan
 			}
 	};
 
+	class subscribe_pack : public base_pack
+	{
+	public:
+	    subscribe_pack(SerialiserInterface* t) : base_pack(t) { }
+	    static constexpr uint16 id = SUBSCRIBE_PACK;
+
+	    uint8 ttl = 6;
+	    uint8 addr = 0;
+	    uint8 port = 0;
+	    uint8 subscribe = 1;
+
+	    uint8 size()
+	    {
+	        return (sizeof(ttl) +
+	                sizeof(port) +
+                    sizeof(addr) +
+                    sizeof(subscribe));
+	    }
+	    uint8 get_id() { return id; }
+	    void send()
+	    {
+	        base_pack::gen_header();
+	        base_pack::to_bytes(ttl);
+	        base_pack::to_bytes(port);
+            base_pack::to_bytes(addr);
+            base_pack::to_bytes(subscribe);
+	        base_pack::finish();
+	    }
+	    void from_bytes(uint8* bytes)
+	    {
+	        uint16 pos = 0;
+	        base_pack::from_bytes(bytes, pos, ttl);
+	        base_pack::from_bytes(bytes, pos, port);
+            base_pack::from_bytes(bytes, pos, addr);
+	        base_pack::from_bytes(bytes, pos, subscribe);
+	    }
+	};
+
+
 	/**
 	 * ParserSerialiser is responsible for converting packets into a series of bytes
-	 * and for parsing bytes into a packet structure. 
+	 * and for parsing bytes into a packet structure.
 	 */
-	class ParserSerialiser 
+	class ParserSerialiser
 		: public SerialiserInterface
 	{
 		public:
 			ParserSerialiser() {}
 
 			/**
-			 * \brief Should return true if bytes are available to be read 
+			 * \brief Should return true if bytes are available to be read
 			 */
 			virtual bool available() = 0;
-			
+
 			/**
 			 * \brief Gets the next byte from the input stream
 			 */
 			virtual uint8 get() = 0;
-			
+
 			/**
 			 * \brief sends a byte to the output stream
 			 */
@@ -494,7 +611,7 @@ namespace picolan
 			/**
 			 * \brief this function is called when a addr_list_pack is received
 			 */
-			virtual void addr_list_pack_handler(addr_list_pack& p) = 0;
+			virtual void addr_pack_handler(addr_pack& p) = 0;
 
 			/**
 			 * \brief this function is called when a ping_pack is received
@@ -510,6 +627,11 @@ namespace picolan
 			 * \brief this function is called when a datagram_pack is received.
 			 */
 			virtual void datagram_pack_handler(datagram_pack& p) = 0;
+
+            /**
+             * \brief this function is called when a subscribe_pack is received.
+             */
+            virtual void subscribe_pack_handler(subscribe_pack& p) = 0;
 
 			/**
 			 * \brief reads all available bytes from the input stream.
@@ -556,7 +678,7 @@ namespace picolan
 								add_byte(c);
 								data_length = c;
 								if(data_length == 0) {
-									state = MSG_STATE_CHECK_1; 
+									state = MSG_STATE_CHECK_1;
 								}
 								else {
 									state = MSG_STATE_DATA;
@@ -634,8 +756,8 @@ namespace picolan
 
 			bool check_checksum()
 			{
-				uint32_t len = data_length+2;
-				uint32_t pos = 0;
+				uint32 len = data_length+2;
+				uint32 pos = 0;
 				reset_checksum();
 				while(pos != len) {
 					step_checksum(data_buf[pos++]);
@@ -651,7 +773,6 @@ namespace picolan
 
 			void read_data()
 			{
-
 				switch(msg_id)
 				{
 					case GET_ADDR_LIST_PACK:
@@ -661,11 +782,11 @@ namespace picolan
 							get_addr_list_pack_handler(pack);
 						}
 						break;
-					case ADDR_LIST_PACK:
+					case ADDR_PACK:
 						{
-							auto pack = create_packet<addr_list_pack>();
+							auto pack = create_packet<addr_pack>();
 							pack.from_bytes(&(data_buf[2]));
-							addr_list_pack_handler(pack);
+							addr_pack_handler(pack);
 						}
 						break;
 					case PING_PACK:
@@ -689,6 +810,13 @@ namespace picolan
 							datagram_pack_handler(pack);
 						}
 						break;
+                    case SUBSCRIBE_PACK:
+                        {
+                            auto pack = create_packet<subscribe_pack>();
+                            pack.from_bytes(&(data_buf[2]));
+                            subscribe_pack_handler(pack);
+                        }
+                        break;
 				}
 			}
 

@@ -33,24 +33,25 @@ namespace picolan
 
 	/**
 	 * The Datagram class is used for sending and receiving packets of data to a destination.
-	 * There is no connection or acknowledgement of receipt. 
+	 * There is no connection or acknowledgement of receipt.
 	 * It just fires out a message to a destination.
 	 */
-	class Datagram 
+	class Datagram
 		: public Socket
 	{
 		public:
-			/**
-			 * \brief The constructor. All sockets require some buffer space. 
-			 * Typically 64 bytes will do, less if your application is sending smaller packets. 
+            /**
+			 * \brief The constructor. All sockets require some buffer space.
+			 * Typically 64 bytes will do, less if your application is sending smaller packets.
 			 * Also required is a port number for the datagram to listen / receive data on.
-			 * After creation, the socket must be bound to an Interface using Interface::bind()  
-			 * @param buffer a pointer to a buffer to store received bytes 
+			 * After creation, the socket must be bound to an Interface using Interface::bind()
+			 * @param buffer a pointer to a buffer to store received bytes
 			 * before they are read with Socket::read()
 			 * @param len the size of the buffer in bytes
 			 * @port the port number to listen on
 			 */
-			Datagram(uint8_t* buffer, uint32_t len, uint8_t port) 
+			#ifndef PICOLAN_NODE_BINDING
+			Datagram(uint8_t* buffer, uint32_t len, uint8_t port)
 				: Socket(buffer, len, port)
 			{ }
 
@@ -64,6 +65,21 @@ namespace picolan
 			 */
 			int write(uint8_t dest, uint8_t port, uint8_t* data, uint32_t len);
 
+            int write(uint8_t dest, uint8_t port, const char* data);
+
+			#else
+
+
+			Datagram(uint8_t port) : Socket(port) { }
+
+			int write(uint8_t dest, uint8_t port, std::vector<uint8_t> data);
+			#endif
+
+            void subscribe(bool sub = true);
+
+            void unsubscribe() {
+                subscribe(false);
+            }
 
 		private:
 			void on_data(
@@ -73,4 +89,3 @@ namespace picolan
 }
 
 #endif
-

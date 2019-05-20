@@ -1,32 +1,42 @@
 #ifndef PICOLAN_SOCKET_H
 #define PICOLAN_SOCKET_H
 
-
+#ifdef ARDUINO
+#include <etk.h>
+#else
 #include <etk/etk.h>
+#endif
+
+#ifdef PICOLAN_NODE_BINDING
+#include <vector>
+#endif
+
 #include "time.h"
 
 namespace picolan
 {
+    /**
+     * ERROR_NONE means no error occured.
+     */
 
-	/**
-	 * ERROR_NONE means no error occured.
-	 */
-	constexpr int ERROR_NONE = 0;
+    /**
+     * ERROR_TIMEOUT there was no response within the timeout period.
+     */
 
-	/**
-	 * ERROR_TIMEOUT there was no response within the timeout period.
-	 */
-	constexpr int ERROR_TIMEOUT = -1;
+    /**
+     * ERROR_BAD_STATE occurs when a function is called and the socket state is incorrect. For example, if the socket is closed it called read or write.
+     */
 
-	/**
-	 * ERROR_BAD_STATE occurs when a function is called and the socket state is incorrect. For example, if the socket is closed it called read or write.
-	 */
-	constexpr int ERROR_BAD_STATE = -2;
+    /**
+     * ERROR_ACK_OUT_OF_SEQUENCE indicates the connection has been interrupted or somehow broken.
+     */
 
-	/**
-	 * ERROR_ACK_OUT_OF_SEQUENCE indicates the connection has been interrupted or somehow broken. 
-	 */
-	constexpr int ERROR_ACK_OUT_OF_SEQUENCE = -3;
+    namespace Error {
+        constexpr int NONE = 0;
+        constexpr int TIMEOUT = -1;
+        constexpr int BAD_STATE = -2;
+        constexpr int ACK_OUT_OF_SEQUENCE = -3;
+    }
 
 
 	/**
@@ -36,13 +46,17 @@ namespace picolan
 	{
 		public:
 			/**
-			 * \brief The socket class is an abstract base class. 
+			 * \brief The socket class is an abstract base class.
 			 * @param buffer a pointer to a buffer where received bytes can be queued until read() is called.
-			 * @param len the length of the buffer. Usually 64 bytes is adequate, however if your application only expects tiny packets this can be reduced and vice versa. 
-			 * @param port the port number for the socket to listen on. 
+			 * @param len the length of the buffer. Usually 64 bytes is adequate, however if your application only expects tiny packets this can be reduced and vice versa.
+			 * @param port the port number for the socket to listen on.
 			 */
-			Socket(uint8_t* buffer, uint32_t len, uint8_t port) 
+			#ifndef PICOLAN_NODE_BINDING
+			Socket(uint8_t* buffer, uint32_t len, uint8_t port)
 				: port(port), ringbuf(buffer, len)
+			#else
+			Socket(uint8_t port) : port(port), ringbuf(buf, 128)
+			#endif
 			{}
 
 			/**
@@ -52,13 +66,24 @@ namespace picolan
 
 
 			/**
+			 * \brief returns the number of bytes received in the socket buffer
+			 */
+			uint32_t available();
+
+
+			/**
 			 * \brief read will copy the bytes from the sockets internal buffer into the buffer provided.
 			 * If len is longer than the number of bytes already received, read will wait until timeout.
 			 * This function also calls Interface::read so all sockets on the interface will be serviced.
 			 * @param buffer the location to store bytes that are received
 			 * @param len the number of bytes to read
 			 */
+
+			#ifndef PICOLAN_NODE_BINDING
 			uint32_t read(uint8_t* buffer, uint32_t len);
+			#else
+			std::vector<uint8_t> read(uint32_t len);
+			#endif
 
 
 			/**
@@ -70,11 +95,11 @@ namespace picolan
 			}
 
 			/**
-			 * \brief gets the source address of the last received packet. 
+			 * \brief gets the source address of the last received packet.
 			 * Useful for datagrams. By calling get_remote a datagram socket can reply to a query.
 			 * \return the source address of the last received packet
 			 */
-			uint8_t get_remote() const { 
+			uint8_t get_remote() const {
 				return remote;
 			}
 
@@ -88,7 +113,7 @@ namespace picolan
 
 			/**
 			 * \brief gets the timeout period in milliseconds
-			 * \return the number of milliseconds that certain functions such as read 
+			 * \return the number of milliseconds that certain functions such as read
 			 * will wait before a timeout error will occur.
 			 */
 			uint16_t get_timeout() const {
@@ -110,6 +135,9 @@ namespace picolan
 			uint8_t port = 0;
 			uint16_t timeout = 1000;
 
+#ifdef PICOLAN_NODE_BINDING
+			uint8_t buf[128];
+#endif
 			etk::RingBuffer<uint8_t> ringbuf;
 
 			virtual void on_data(
@@ -118,4 +146,3 @@ namespace picolan
 }
 
 #endif
-

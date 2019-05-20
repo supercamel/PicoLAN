@@ -6,12 +6,15 @@ namespace picolan
 
 Socket::~Socket() {
 	if(iface != nullptr) {
-		iface->unbind_socket(this);
+		iface->unbind_socket(*this);
 	}
 }
 
+uint32_t Socket::available() {
+	return ringbuf.available();
+}
+
 int Socket::timedRead() {
-	int c;
 	uint32_t dt = 0;
 	auto startMillis = millis();
 	do {
@@ -21,10 +24,11 @@ int Socket::timedRead() {
 		iface->read();
 		dt = millis() - startMillis;
 	} while(dt < timeout);
-	return ERROR_TIMEOUT;
+	return Error::TIMEOUT;
 }
 
-int32_t Socket::read(uint8_t* buffer, uint32_t len) {
+#ifndef PICOLAN_NODE_BINDING
+uint32_t Socket::read(uint8_t* buffer, uint32_t len) {
 	uint32_t count = 0;
 	while(count < len) {
 		auto c = timedRead();
@@ -35,12 +39,24 @@ int32_t Socket::read(uint8_t* buffer, uint32_t len) {
 	}
 	return count;
 }
+#else
+std::vector<uint8_t> Socket::read(uint32_t len) {
+	std::vector<uint8_t> ret;
+	while(ret.size() < len) {
+		int c = timedRead();
+		if(c == Error::TIMEOUT) {
+			break;
+		}
+		ret.push_back(c);
+	}
+	return ret;
+}
+#endif
 
 void Socket::destroy() {
 	if(iface != nullptr) {
-		iface->unbind_socket(this);
+		iface->unbind_socket(*this);
 	}
 }
 
 }
-

@@ -29,8 +29,16 @@
 namespace picolan
 {
 
+#ifndef PICOLAN_NODE_BINDING
 int Datagram::write(uint8_t dest, uint8_t dest_port,  uint8_t* data, uint32_t len) {
-	const uint32_t CHUNK_SZ = 220;
+
+#else
+int Datagram::write(uint8_t dest, uint8_t dest_port,  std::vector<uint8_t> data) {
+	uint32_t len = data.size();
+
+#endif
+
+	const uint32_t CHUNK_SZ = 58;
 	uint32_t chunks = len/CHUNK_SZ;
 
 	for(uint32_t i = 0; i < chunks; i++)
@@ -55,14 +63,33 @@ int Datagram::write(uint8_t dest, uint8_t dest_port,  uint8_t* data, uint32_t le
 		pack.dest_addr = dest;
 		pack.source_addr = iface->get_address();
 		pack.port = dest_port;
-		for(uint32_t i = 0; i < remainder; i++) 
+		for(uint32_t i = 0; i < remainder; i++)
 		{
 			pack.payload.append(data[chunks*CHUNK_SZ + i]);
 		}
 		pack.send();
 	}
 
-	return ERROR_NONE;
+    iface->flush();
+	return Error::NONE;
+}
+
+#ifndef PICOLAN_NODE_BINDING
+int Datagram::write(uint8_t dest, uint8_t dest_port, const char* data)
+{
+    uint32_t len = etk::Rope::c_strlen(data, 1024);
+    return write(dest, dest_port, (uint8_t*)data, len);
+}
+#endif
+
+void Datagram::subscribe(bool sub) {
+    auto pack = iface->create_packet<subscribe_pack>();
+    pack.ttl = 6;
+    pack.addr = iface->get_address();
+    pack.port = get_port();
+    pack.subscribe = (int)sub;
+    pack.send();
+    iface->flush();
 }
 
 void Datagram::on_data(uint8_t r, const uint8_t* data, uint32_t len)
@@ -76,4 +103,3 @@ void Datagram::on_data(uint8_t r, const uint8_t* data, uint32_t len)
 }
 
 }
-

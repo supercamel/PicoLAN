@@ -23,8 +23,8 @@
 */
 
 
-#ifndef PICOLAN_SERVER_H 
-#define PICOLAN_SERVER_H 
+#ifndef PICOLAN_SERVER_H
+#define PICOLAN_SERVER_H
 
 #include "socket_stream.h"
 
@@ -33,20 +33,24 @@ namespace picolan
 
 	/**
 	 * The Server class can accept a connection from a client.
-	 * A useage might be to serve sensor data to a client. 
+	 * A useage might be to serve sensor data to a client.
 	 */
-	
+
 	class Server : public SocketStream
 	{
 		public:
 			/**
-			 * The server requires a buffer to store bytes that are received. 
+			 * The server requires a buffer to store bytes that are received.
 			 * @param bf a pointer to the buffer
 			 * @param len the length of the buffer
 			 * @param port the port number to listen on
 			 */
-			Server(uint8_t* bf, uint32_t len, uint8_t port) 
+			#ifndef PICOLAN_NODE_BINDING
+			Server(uint8_t* bf, uint32_t len, uint8_t port)
 				: SocketStream(bf, len, port)
+			#else
+			Server(uint8_t port) : SocketStream(port)
+			#endif
 			{
 				state = CONNECTION_CLOSED;
 			}
@@ -83,4 +87,3 @@ namespace picolan
 }
 
 #endif
-

@@ -26,6 +26,7 @@
 #include "server.h"
 #include "picolan.h"
 
+
 namespace picolan
 {
 
@@ -33,12 +34,12 @@ int Server::listen()
 {
 	if(state == CONNECTION_CLOSED) {
 		state = CONNECTION_LISTENING;
-		return ERROR_NONE;
+		return Error::NONE;
 	}
-	return ERROR_BAD_STATE;
+	return Error::BAD_STATE;
 }
 
-bool Server::connection_pending() 
+bool Server::connection_pending()
 {
 	return (state == CONNECTION_SYN_RECVED);
 }
@@ -60,17 +61,17 @@ int Server::accept()
 			dt = millis() - start;
 			if(dt > get_timeout()) {
 				disconnect();
-				return ERROR_TIMEOUT;
+				return Error::TIMEOUT;
 			}
 		} while(state == CONNECTION_PENDING);
 
 		if(state != CONNECTION_OPEN) {
 			disconnect();
 		} else {
-			return ERROR_NONE;
+			return Error::NONE;
 		}
 	}
-	return ERROR_BAD_STATE;
+	return Error::BAD_STATE;
 }
 
 
@@ -86,7 +87,7 @@ void Server::on_data(uint8_t r, const uint8_t* data, uint32_t len)
 				if(data[0] == MESSAGE_TYPE::SYN) {
 					remote = r;
 					remote_sequence = data[1];
-					remote_port = data[2];	
+					remote_port = data[2];
 					state = CONNECTION_SYN_RECVED;
 				}
 			}
@@ -142,9 +143,10 @@ void Server::on_data(uint8_t r, const uint8_t* data, uint32_t len)
 				}
 			}
 			break;
+			case CONNECTION_SYN_SENT:
+			break;
 
 	}
 }
 
 }
-

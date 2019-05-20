@@ -23,8 +23,8 @@
 */
 
 
-#ifndef PICOLAN_CLIENT_H 
-#define PICOLAN_CLIENT_H 
+#ifndef PICOLAN_CLIENT_H
+#define PICOLAN_CLIENT_H
 
 #include "socket_stream.h"
 
@@ -33,7 +33,7 @@ namespace picolan
 
 	/**
 	 * The Client class is used to connect to a Server.
-	 * The client will either connect, or timeout if the server is unavailable. 
+	 * The client will either connect, or timeout if the server is unavailable.
 	 * Once the connection is established, the client and server can exchange data
 	 * using SocketStream::read() and SocketStream::write()
 	 */
@@ -47,11 +47,16 @@ namespace picolan
 			 * @param len the length of the buffer. generally 64 bytes is adequate.
 			 * @param port the port number to receive on. the number isn't important but it must be unique for each socket per interface.
 			 */
-			Client(uint8_t* bf, uint32_t len, uint8_t port) 
-				: SocketStream(bf, len, port)
-			{
-				state = CONNECTION_CLOSED;
-			}
+            #ifndef PICOLAN_NODE_BINDING
+ 			Client(uint8_t* bf, uint32_t len, uint8_t port)
+ 				: SocketStream(bf, len, port)
+ 			#else
+ 			Client(uint8_t port) : SocketStream(port)
+ 			#endif
+ 			{
+ 				state = CONNECTION_CLOSED;
+ 			}
+
 
 			/*
 			   \brief get_remote_port will return the port number of the server
@@ -62,7 +67,7 @@ namespace picolan
 			}
 
 			/**
-			 * \brief connect() will attempt to establish a connection with a server. 
+			 * \brief connect() will attempt to establish a connection with a server.
 			 * @param r Server address
 			 * @param port Server port number
 			 *
@@ -75,4 +80,3 @@ namespace picolan
 }
 
 #endif
-
