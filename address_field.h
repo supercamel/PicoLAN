@@ -16,7 +16,7 @@ class AddressField
 {
 public:
 	AddressField() {
-		for(int i = 0; i < NUM_BYTES; i++) {
+		for(uint32_t i = 0; i < NUM_BYTES; i++) {
 			bits[i].set(0);
 		}
 	}

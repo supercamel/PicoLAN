@@ -91,10 +91,10 @@ namespace picolan
 	class SerialiserInterface
 	{
 		public:
-			virtual void reset_checksum() = 0;
-			virtual void send_byte(uint8 b) = 0;
+			virtual void start() = 0;
 			virtual uint16 finish_checksum() = 0;
-			virtual void flush() = 0;
+			virtual void send_byte(uint8 b) = 0;
+			virtual void finish() = 0;
 	};
 
 	/**
@@ -115,14 +115,12 @@ namespace picolan
 
 			void gen_header()
 			{
-				put(0xAB);
-				put(0xCD);
-				serialiser->reset_checksum();
+				serialiser->start();
 				put(get_id());
 				put(size());
 			}
 
-
+			/*{{{*/
 			template <uint32 SZ> void to_bytes(etk::StaticString<SZ>& str)
 			{
 				for(uint32 i = 0; i < SZ; i++)
@@ -232,8 +230,8 @@ namespace picolan
 					put(af.get_bitfield(i).get());
 				}
 			}
-
-			template <uint32 SZ> void from_bytes(uint8* bytes, uint16& pos, etk::StaticString<SZ>& str)
+			/*}}}*/
+			template <uint32 SZ> void from_bytes(uint8* bytes, uint16& pos, etk::StaticString<SZ>& str)/*{{{*/
 			{
 				for(uint32 i = 0; i < SZ; i++)
 				{
@@ -333,19 +331,20 @@ namespace picolan
 					af.get_bitfield(i).set(bytes[pos++]);
 				}
 			}
-
+			/*}}}*/
 			void finish()
 			{
-				u16b ub;
-				ub.u = serialiser->finish_checksum();
-				put(ub.bytes[0]);
-				put(ub.bytes[1]);
-				serialiser->flush();
+				u16b u;	
+				u.u = serialiser->finish_checksum();
+				put(u.bytes[0]);
+				put(u.bytes[1]);
+				serialiser->finish();
 			}
 
 		protected:
 			void put(uint8 b)
 			{
+
 				serialiser->send_byte(b);
 			}
 
@@ -358,7 +357,7 @@ namespace picolan
 	 * Typically sent from a device to the network switch.
 	 * Used by switches to build routing tables.
 	 */
-	class get_addr_list_pack : public base_pack
+	class get_addr_list_pack : public base_pack/*{{{*/
 	{
 		public:
 			get_addr_list_pack(SerialiserInterface* t) : base_pack(t) { }
@@ -381,13 +380,13 @@ namespace picolan
 				uint16 pos = 0;
 				base_pack::from_bytes(bytes, pos, ttl);
 			}
-	};
+	};/*}}}*/
 
 	/**
 	 * addr_pack contains a bitfield of addresses
 	 * Used by switches to build routing tables.
 	 */
-	class addr_pack : public base_pack
+	class addr_pack : public base_pack/*{{{*/
 	{
 		public:
 			addr_pack(SerialiserInterface* t) : base_pack(t) { }
@@ -411,13 +410,13 @@ namespace picolan
 				uint16 pos = 0;
 				base_pack::from_bytes(bytes, pos, address_field);
 			}
-	};
+	};/*}}}*/
 
 	/**
 	 * ping_pack sends a ping from one device to another.
 	 * The switches route this packet to all available interfaces that have the destination address.
 	 */
-	class ping_pack : public base_pack
+	class ping_pack : public base_pack/*{{{*/
 	{
 		public:
 			ping_pack(SerialiserInterface* t) : base_pack(t) { }
@@ -452,13 +451,13 @@ namespace picolan
 				base_pack::from_bytes(bytes, pos, dest_addr);
 				base_pack::from_bytes(bytes, pos, payload);
 			}
-	};
+	};/*}}}*/
 
 	/**
 	 * ping_echo_pack is sent by a device in response to a ping_pack
 	 * The switches will route this packet to the dest_addr
 	 */
-	class ping_echo_pack : public base_pack
+	class ping_echo_pack : public base_pack/*{{{*/
 	{
 		public:
 			ping_echo_pack(SerialiserInterface* t) : base_pack(t) { }
@@ -493,12 +492,12 @@ namespace picolan
 				base_pack::from_bytes(bytes, pos, dest_addr);
 				base_pack::from_bytes(bytes, pos, payload);
 			}
-	};
+	};/*}}}*/
 
 	/**
 	 * datagram_pack is a packet containing data up to 54 bytes (10 bytes for header/checksum)
 	 */
-	class datagram_pack : public base_pack
+	class datagram_pack : public base_pack/*{{{*/
 	{
 		public:
 			datagram_pack(SerialiserInterface* t) : base_pack(t) { }
@@ -537,45 +536,45 @@ namespace picolan
 				base_pack::from_bytes(bytes, pos, port);
 				base_pack::from_bytes(bytes, pos, payload);
 			}
-	};
+	};/*}}}*/
 
-	class subscribe_pack : public base_pack
+	class subscribe_pack : public base_pack/*{{{*/
 	{
-	public:
-	    subscribe_pack(SerialiserInterface* t) : base_pack(t) { }
-	    static constexpr uint16 id = SUBSCRIBE_PACK;
+		public:
+			subscribe_pack(SerialiserInterface* t) : base_pack(t) { }
+			static constexpr uint16 id = SUBSCRIBE_PACK;
 
-	    uint8 ttl = 6;
-	    uint8 addr = 0;
-	    uint8 port = 0;
-	    uint8 subscribe = 1;
+			uint8 ttl = 6;
+			uint8 addr = 0;
+			uint8 port = 0;
+			uint8 subscribe = 1;
 
-	    uint8 size()
-	    {
-	        return (sizeof(ttl) +
-	                sizeof(port) +
-                    sizeof(addr) +
-                    sizeof(subscribe));
-	    }
-	    uint8 get_id() { return id; }
-	    void send()
-	    {
-	        base_pack::gen_header();
-	        base_pack::to_bytes(ttl);
-	        base_pack::to_bytes(port);
-            base_pack::to_bytes(addr);
-            base_pack::to_bytes(subscribe);
-	        base_pack::finish();
-	    }
-	    void from_bytes(uint8* bytes)
-	    {
-	        uint16 pos = 0;
-	        base_pack::from_bytes(bytes, pos, ttl);
-	        base_pack::from_bytes(bytes, pos, port);
-            base_pack::from_bytes(bytes, pos, addr);
-	        base_pack::from_bytes(bytes, pos, subscribe);
-	    }
-	};
+			uint8 size()
+			{
+				return (sizeof(ttl) +
+						sizeof(port) +
+						sizeof(addr) +
+						sizeof(subscribe));
+			}
+			uint8 get_id() { return id; }
+			void send()
+			{
+				base_pack::gen_header();
+				base_pack::to_bytes(ttl);
+				base_pack::to_bytes(port);
+				base_pack::to_bytes(addr);
+				base_pack::to_bytes(subscribe);
+				base_pack::finish();
+			}
+			void from_bytes(uint8* bytes)
+			{
+				uint16 pos = 0;
+				base_pack::from_bytes(bytes, pos, ttl);
+				base_pack::from_bytes(bytes, pos, port);
+				base_pack::from_bytes(bytes, pos, addr);
+				base_pack::from_bytes(bytes, pos, subscribe);
+			}
+	};/*}}}*/
 
 
 	/**
@@ -586,17 +585,7 @@ namespace picolan
 		: public SerialiserInterface
 	{
 		public:
-			ParserSerialiser() {}
-
-			/**
-			 * \brief Should return true if bytes are available to be read
-			 */
-			virtual bool available() = 0;
-
-			/**
-			 * \brief Gets the next byte from the input stream
-			 */
-			virtual uint8 get() = 0;
+			ParserSerialiser() {}/*{{{*/
 
 			/**
 			 * \brief sends a byte to the output stream
@@ -628,44 +617,43 @@ namespace picolan
 			 */
 			virtual void datagram_pack_handler(datagram_pack& p) = 0;
 
-            /**
-             * \brief this function is called when a subscribe_pack is received.
-             */
-            virtual void subscribe_pack_handler(subscribe_pack& p) = 0;
-
+			/**
+			 * \brief this function is called when a subscribe_pack is received.
+			 */
+			virtual void subscribe_pack_handler(subscribe_pack& p) = 0;
+			/*}}}*/
 			/**
 			 * \brief reads all available bytes from the input stream.
 			 * Input bytes are parsed using a state machine and when a valid packet is read
 			 * the appropriate handler function is called.
 			 */
-			void read()
+			void read(uint8_t c)/*{{{*/
 			{
-				while(available())
-				{
-					uint8 c = get();
+				if((c == 0xAA) && (stuff_flag == false)) {
+					stuff_flag = true;
+				}
+				else {
+					if(stuff_flag == false) {
+						if((c == 0xAB) || (c == 0xAC)) {
+							state = MSG_STATE_START;
+						}
+					}
+					stuff_flag = false;
+
 					switch(state)
 					{
-						case MSG_STATE_START_1:
+						case MSG_STATE_START:
 							{
 								data_pos = 0;
 								if(c == 0xAB)
-									state = MSG_STATE_START_2;
-							}
-							break;
-						case MSG_STATE_START_2:
-							{
-								data_pos = 0;
-								if(c == 0xCD)
 									state = MSG_STATE_ID;
-								else
-									state = MSG_STATE_START_1;
 							}
 							break;
 						case MSG_STATE_ID:
 							{
 								msg_id = c;
 								if(msg_id >= NULL_PACK)
-									state = MSG_STATE_START_1;
+									state = MSG_STATE_START;
 								else
 								{
 									add_byte(c);
@@ -704,16 +692,15 @@ namespace picolan
 
 								if(check_checksum())
 									read_data();
-
-								state = MSG_STATE_START_1;
+								state = MSG_STATE_START;
 							}
 							break;
 						default:
-							state = MSG_STATE_START_1;
+							state = MSG_STATE_START;
 					}
 				}
 			}
-
+			/*}}}*/
 
 			/**
 			 * Creates a packet that can be sent using this serialiser.
@@ -724,6 +711,8 @@ namespace picolan
 				return pack;
 			}
 
+			virtual void flush() = 0;
+
 
 		private:
 			friend class base_pack;
@@ -732,24 +721,28 @@ namespace picolan
 				data_buf[data_pos++] = c;
 			}
 
+			void start() {
+				reset_checksum();
+				this->put(0xAB);
+			}
+
+			void finish() {
+				this->put(0xAC);
+				this->flush();
+			}
+
+
 			void reset_checksum() {
-				sum1 = 0xff;
-				sum2 = 0xff;
-				send_pos = 0;
+				sum1 = 0;
+				sum2 = 0;
 			}
 
 			void step_checksum(uint8 data) {
-				sum2 += sum1 += data;
-				if(send_pos++ == 20) {
-					sum1 = (sum1 & 0xff) + (sum1 >> 8);
-					sum2 = (sum2 & 0xff) + (sum2 >> 8);
-					send_pos = 0;
-				}
+				sum1 = (sum1 + data) %255;
+				sum2 = (sum2 + sum1) %255;
 			}
 
 			uint16 finish_checksum() {
-				sum1 = (sum1 & 0xff) + (sum1 >> 8);
-				sum2 = (sum2 & 0xff) + (sum2 >> 8);
 				uint16 checksum = (sum2 << 8) | sum1;
 				return checksum;
 			}
@@ -757,16 +750,20 @@ namespace picolan
 			bool check_checksum()
 			{
 				uint32 len = data_length+2;
-				uint32 pos = 0;
-				reset_checksum();
-				while(pos != len) {
-					step_checksum(data_buf[pos++]);
+				uint16 s1 = 0;
+				uint16 s2 = 0;
+				for(auto i : etk::range(len)) {
+					s1 = (s1 + (uint8)data_buf[i]) % 255;
+					s2 = (s2 + s1) %255;
 				}
-				uint16 cs = finish_checksum();
+				uint16 cs = (s2 << 8) | s1;
 				return (cs == checksum_in);
 			}
 
 			void send_byte(uint8 b) {
+				if((b >= 0xAA) && (b <= 0xAC)) {
+					this->put(0xAA);
+				}
 				this->put(b);
 				step_checksum(b);
 			}
@@ -810,21 +807,20 @@ namespace picolan
 							datagram_pack_handler(pack);
 						}
 						break;
-                    case SUBSCRIBE_PACK:
-                        {
-                            auto pack = create_packet<subscribe_pack>();
-                            pack.from_bytes(&(data_buf[2]));
-                            subscribe_pack_handler(pack);
-                        }
-                        break;
+					case SUBSCRIBE_PACK:
+						{
+							auto pack = create_packet<subscribe_pack>();
+							pack.from_bytes(&(data_buf[2]));
+							subscribe_pack_handler(pack);
+						}
+						break;
 				}
 			}
 
 
 			enum MSG_STATE
 			{
-				MSG_STATE_START_1,
-				MSG_STATE_START_2,
+				MSG_STATE_START,
 				MSG_STATE_ID,
 				MSG_STATE_SIZE,
 				MSG_STATE_DATA,
@@ -832,7 +828,8 @@ namespace picolan
 				MSG_STATE_CHECK_2
 			};
 
-			MSG_STATE state = MSG_STATE_START_1;
+			MSG_STATE state = MSG_STATE_START;
+			bool stuff_flag = false;
 			uint16 sum1;
 			uint16 sum2;
 			uint16 msg_id = 0;
@@ -841,7 +838,6 @@ namespace picolan
 			uint8 data_pos = 0;
 
 			uint8 data_buf[MAX_PACKET_LENGTH];
-			uint8 send_pos = 0;
 	};
 
 
