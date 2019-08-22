@@ -242,6 +242,12 @@ class Interface
 			return serial.available() != 0;
 		}
 
+		void read() {
+			while(available()) {
+				ParserSerialiser::read(get());
+			}
+		}
+
 	private:
 		friend class ParserSerialiser;
 
