@@ -62,7 +62,7 @@ namespace picolan
 			/**
 			 * \brief The destructor unbinds the socket from the interface.
 			 */
-			~Socket();
+			virtual ~Socket();
 
 
 			/**

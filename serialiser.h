@@ -91,6 +91,7 @@ namespace picolan
 	class SerialiserInterface
 	{
 		public:
+            virtual ~SerialiserInterface() { }
 			virtual void start() = 0;
 			virtual uint16 finish_checksum() = 0;
 			virtual void send_byte(uint8 b) = 0;
@@ -103,7 +104,9 @@ namespace picolan
 	class base_pack
 	{
 		public:
+            virtual ~base_pack() { } 
 			base_pack(SerialiserInterface* serialiser) : serialiser(serialiser) { }
+
 			virtual uint8 get_id() = 0;
 			virtual void send() = 0;
 			virtual void from_bytes(uint8* bytes) = 0;

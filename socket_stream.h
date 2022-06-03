@@ -78,6 +78,8 @@ class SocketStream : public Socket
 		SocketStream(uint8_t port) : Socket(port) { }
 		#endif
 
+        virtual ~SocketStream() { }
+
 		/*!
 		 write writes a number of bytes
 		 \param bytes a pointer to the bytes to write
