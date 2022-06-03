@@ -252,7 +252,7 @@ class Interface
 		friend class ParserSerialiser;
 
 		uint8 get() {
-			uint8 r = serial.read();
+			uint8 r = serial.get();
 			return r;
 		}
 
